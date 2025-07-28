@@ -744,6 +744,73 @@
           "500": { "description": "Erro interno do servidor" }
         }
       }
+    },
+    "/chat/consolidar-relatorio": {
+      "post": {
+        "tags": ["Chat"],
+        "summary": "Consolidar relatório via assistente",
+        "description": "Consolida toda a conversa de uma thread em um relatório final limpo e profissional",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "threadId": {
+                    "type": "string",
+                    "description": "ID da thread OpenAI"
+                  },
+                  "prompt": {
+                    "type": "string",
+                    "description": "Prompt personalizado para consolidação (opcional)"
+                  },
+                  "etapa": {
+                    "type": "string",
+                    "description": "Etapa do workshop (disc, missao, swot, etc.)"
+                  }
+                },
+                "required": ["threadId"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Relatório consolidado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "relatorioConsolidado": {
+                      "type": "string",
+                      "description": "Relatório consolidado"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Dados inválidos"
+          },
+          "500": {
+            "description": "Erro interno do servidor"
+          }
+        }
+      }
     }
   },
   "components": {

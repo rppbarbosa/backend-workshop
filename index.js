@@ -656,6 +656,163 @@ app.get('/chat/teste-atualizacao/:threadId/:tipoRelatorio', authenticateToken, a
   }
 });
 
+// Rota de teste detalhada para debug do problema
+app.get('/chat/debug-relatorio/:threadId/:tipoRelatorio', authenticateToken, async (req, res) => {
+  try {
+    const { threadId, tipoRelatorio } = req.params;
+    
+    console.log(`🔍 DEBUG: Analisando relatório threadId=${threadId}, tipoRelatorio=${tipoRelatorio}`);
+    
+    // 1. Verificar se o relatório existe
+    const existingReport = await chatAPI.getRelatorio(threadId, tipoRelatorio);
+    console.log('📋 Relatório encontrado:', existingReport);
+    
+    if (!existingReport) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Relatório não encontrado',
+        debug: { threadId, tipoRelatorio }
+      });
+    }
+    
+    // 2. Tentar atualização simples
+    const testResult = await chatAPI.testUpdateRelatorio(threadId, tipoRelatorio);
+    console.log('🧪 Resultado do teste:', testResult);
+    
+    // 3. Tentar atualização completa
+    let updateResult = null;
+    try {
+      updateResult = await chatAPI.atualizarRelatorio(
+        threadId, 
+        tipoRelatorio, 
+        'Teste de conteúdo - ' + new Date().toISOString(), 
+        'teste'
+      );
+      console.log('✅ Atualização completa funcionou:', updateResult);
+    } catch (updateError) {
+      console.error('❌ Atualização completa falhou:', updateError);
+      updateResult = { error: updateError.message };
+    }
+    
+    res.json({
+      success: true,
+      debug: {
+        threadId,
+        tipoRelatorio,
+        existingReport: {
+          id: existingReport.id,
+          status: existingReport.status,
+          conteudo_length: existingReport.conteudo ? existingReport.conteudo.length : 0,
+          criado_em: existingReport.criado_em,
+          atualizado_em: existingReport.atualizado_em
+        },
+        testResult,
+        updateResult
+      }
+    });
+    
+  } catch (error) {
+    console.error('Erro no debug:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Consolidar relatório via assistente
+app.post('/chat/consolidar-relatorio', authenticateToken, async (req, res) => {
+  try {
+    const { threadId, prompt, etapa } = req.body;
+    
+    if (!threadId) {
+      return res.status(400).json({ error: 'threadId é obrigatório' });
+    }
+    
+    console.log(`🔄 Consolidando relatório para threadId: ${threadId}, etapa: ${etapa}`);
+    
+    // 1. Buscar todas as mensagens da thread OpenAI
+    const OpenAI = require('openai');
+    const openaiApiKey = process.env.OPENAI_API_KEY;
+    if (!openaiApiKey) {
+      return res.status(500).json({ error: 'OPENAI_API_KEY não configurada' });
+    }
+    const openaiClient = new OpenAI({ apiKey: openaiApiKey });
+    
+    // 2. Buscar mensagens da thread
+    const messages = await openaiClient.beta.threads.messages.list(threadId);
+    console.log(`📋 Encontradas ${messages.data.length} mensagens na thread`);
+    
+    // 3. Obter configuração do assistente para a etapa
+    const assistantConfig = assistantManager.getAssistantConfig(etapa || 'disc');
+    
+    if (!assistantConfig.assistantId) {
+      return res.status(500).json({ 
+        error: `Assistente não configurado para etapa '${etapa}'. Configure OPENAI_ASSISTANT_${etapa?.toUpperCase()} no .env` 
+      });
+    }
+    
+    // 4. Criar prompt de consolidação
+    const consolidationPrompt = prompt || `
+Consolide toda a conversa desta thread em um relatório final limpo e profissional.
+
+Instruções:
+- Leia toda a conversa entre usuário e assistente
+- Identifique o relatório principal e todas as alterações solicitadas
+- Integre todas as alterações de forma natural no relatório
+- Remova repetições, introduções e conclusões desnecessárias
+- Mantenha apenas o conteúdo essencial e profissional
+- Se houver frases motivacionais solicitadas, organize-as em uma seção dedicada
+- Retorne apenas o relatório consolidado final
+
+Retorne o relatório consolidado sem introduções ou explicações adicionais.
+`;
+    
+    // 5. Adicionar mensagem de consolidação na thread
+    await openaiClient.beta.threads.messages.create(threadId, {
+      role: 'user',
+      content: consolidationPrompt
+    });
+    
+    // 6. Criar run para processar a consolidação
+    const run = await openaiClient.beta.threads.runs.create(threadId, {
+      assistant_id: assistantConfig.assistantId,
+      instructions: assistantConfig.instructions + '\n\nConsolide o relatório conforme solicitado pelo usuário.'
+    });
+    
+    // 7. Aguardar conclusão do run
+    let runStatus = run.status;
+    while (runStatus === 'queued' || runStatus === 'in_progress') {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const runCheck = await openaiClient.beta.threads.runs.retrieve(threadId, run.id);
+      runStatus = runCheck.status;
+    }
+    
+    if (runStatus === 'completed') {
+      // 8. Buscar a resposta consolidada
+      const updatedMessages = await openaiClient.beta.threads.messages.list(threadId);
+      const assistantMessage = updatedMessages.data.find(msg => msg.role === 'assistant' && msg.run_id === run.id);
+      
+      if (assistantMessage) {
+        const consolidatedReport = assistantMessage.content[0].text.value;
+        
+        console.log('✅ Relatório consolidado com sucesso');
+        
+        res.json({
+          success: true,
+          relatorioConsolidado: consolidatedReport,
+          message: 'Relatório consolidado com sucesso'
+        });
+      } else {
+        throw new Error('Nenhuma resposta do assistente encontrada');
+      }
+    } else {
+      throw new Error(`Run falhou com status: ${runStatus}`);
+    }
+    
+  } catch (error) {
+    console.error('Erro ao consolidar relatório:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ===== ROTA DE ORQUESTRAÇÃO MVV + CHAT + GPT (COM THREADS OPENAI) =====
 app.post('/mvv/assistente', authenticateToken, async (req, res) => {
   try {
