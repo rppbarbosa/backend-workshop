@@ -1,0 +1,13 @@
+# Configurações do Supabase - Novo Projeto
+# Copie estas linhas para o arquivo .env
+
+# String de conexão para o banco de dados
+DATABASE_URL=postgresql://postgres.sb_publishable_EYiz5wDhj1kmdQknKoCC9w_pArOX7ow:bH5eFnW8IOb8Awrapbt8gg_ie7RfJ5c@aws-0-us-east-1.pooler.supabase.com:6543/postgres
+
+# Chave secreta para JWT (você pode gerar uma nova se quiser)
+JWT_SECRET=future-law-planner-secret-key-2024-new-project
+
+# Informações do projeto:
+# Project ID: afenadplcbxgigmaqrva
+# Anon Key: sb_publishable_EYiz5wDhj1kmdQknKoCC9w_pArOX7ow
+# Service Key: sb_secret_bH5eFnW8IOb8Awrapbt8gg_ie7RfJ5c 

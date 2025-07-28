@@ -1,0 +1,1027 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Future Law Planner API",
+    "description": "API RESTful para gerenciamento de usuários, planos e relatórios do Future Law Planner.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Future Law Planner",
+      "email": "suporte@futurelawplanner.com"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3000",
+      "description": "Servidor de Desenvolvimento"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Autenticação",
+      "description": "Rotas para cadastro, login e gerenciamento de usuários"
+    },
+    {
+      "name": "Usuários",
+      "description": "Gerenciamento de dados dos usuários"
+    },
+    {
+      "name": "Workshop",
+      "description": "Dados e relatórios do workshop de planejamento"
+    },
+    {
+      "name": "MVV",
+      "description": "Rotas para Missão, Visão e Valores"
+    },
+    {
+      "name": "Chat",
+      "description": "Rotas para threads de chat, mensagens e relatórios do GPT"
+    }
+  ],
+  "paths": {
+    "/register": {
+      "post": {
+        "tags": ["Autenticação"],
+        "summary": "Cadastrar novo usuário",
+        "description": "Cria uma nova conta de usuário com OAB+UF e senha",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "nome_completo": { 
+                    "type": "string", 
+                    "example": "João da Silva",
+                    "description": "Nome completo do advogado"
+                  },
+                  "email": { 
+                    "type": "string", 
+                    "example": "joao@email.com",
+                    "description": "Email profissional"
+                  },
+                  "oab": { 
+                    "type": "string", 
+                    "example": "123456",
+                    "description": "Número da OAB (apenas números)"
+                  },
+                  "uf_oab": { 
+                    "type": "string", 
+                    "example": "PR",
+                    "description": "UF da OAB (2 letras)"
+                  },
+                  "senha": { 
+                    "type": "string", 
+                    "example": "minhasenha123",
+                    "description": "Senha de acesso"
+                  }
+                },
+                "required": ["nome_completo", "email", "oab", "uf_oab", "senha"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Usuário criado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/User" }
+              }
+            }
+          },
+          "400": { 
+            "description": "Dados obrigatórios faltando",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "409": { 
+            "description": "Usuário já existe",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "500": { 
+            "description": "Erro interno do servidor",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/login": {
+      "post": {
+        "tags": ["Autenticação"],
+        "summary": "Fazer login",
+        "description": "Autentica usuário com email e senha",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { 
+                    "type": "string", 
+                    "example": "joao@email.com",
+                    "description": "Email cadastrado"
+                  },
+                  "senha": { 
+                    "type": "string", 
+                    "example": "minhasenha123",
+                    "description": "Senha de acesso"
+                  }
+                },
+                "required": ["email", "senha"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Login realizado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "token": { "type": "string" },
+                    "user": { "$ref": "#/components/schemas/User" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { 
+            "description": "Email e senha são obrigatórios",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "401": { 
+            "description": "Email ou senha incorretos",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "500": { 
+            "description": "Erro interno do servidor",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users": {
+      "get": {
+        "tags": ["Usuários"],
+        "summary": "Listar usuários",
+        "description": "Lista todos os usuários cadastrados",
+        "responses": {
+          "200": {
+            "description": "Lista de usuários",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/User" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "tags": ["Usuários"],
+        "summary": "Buscar usuário por ID",
+        "description": "Busca um usuário específico pelo ID",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "ID único do usuário"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Usuário encontrado",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/User" }
+              }
+            }
+          },
+          "404": { "description": "Usuário não encontrado" }
+        }
+      },
+      "put": {
+        "tags": ["Usuários"],
+        "summary": "Atualizar usuário",
+        "description": "Atualiza dados de um usuário existente",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "ID único do usuário"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/UserUpdate" }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Usuário atualizado" },
+          "404": { "description": "Usuário não encontrado" }
+        }
+      },
+      "delete": {
+        "tags": ["Usuários"],
+        "summary": "Remover usuário",
+        "description": "Remove um usuário do sistema",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "ID único do usuário"
+          }
+        ],
+        "responses": {
+          "204": { "description": "Usuário removido" },
+          "404": { "description": "Usuário não encontrado" }
+        }
+      }
+    },
+    "/mvv/respostas": {
+      "post": {
+        "tags": ["MVV"],
+        "summary": "Salvar respostas da MVV",
+        "description": "Salva ou atualiza as respostas da Missão, Visão e Valores",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/MvvRespostas" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Respostas salvas com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "data": { "$ref": "#/components/schemas/MvvRespostas" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { 
+            "description": "Dados inválidos",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "401": { "description": "Token de acesso necessário" },
+          "403": { "description": "Token inválido" }
+        }
+      },
+      "get": {
+        "tags": ["MVV"],
+        "summary": "Buscar respostas da MVV",
+        "description": "Busca as respostas da MVV do usuário autenticado",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Respostas encontradas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "data": { "$ref": "#/components/schemas/MvvRespostas" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Token de acesso necessário" },
+          "403": { "description": "Token inválido" }
+        }
+      },
+      "delete": {
+        "tags": ["MVV"],
+        "summary": "Deletar respostas da MVV",
+        "description": "Remove todas as respostas da MVV do usuário autenticado",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Respostas deletadas com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "description": "Token de acesso necessário" },
+          "403": { "description": "Token inválido" }
+        }
+      }
+    },
+    "/mvv/respostas/{campo}": {
+      "put": {
+        "tags": ["MVV"],
+        "summary": "Atualizar resposta específica",
+        "description": "Atualiza uma resposta específica da MVV",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "campo",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "Campo da resposta a ser atualizada",
+            "example": "atividades_motivadoras"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "resposta": { 
+                    "type": "string",
+                    "example": "Nova resposta para o campo"
+                  }
+                },
+                "required": ["resposta"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resposta atualizada com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "campo": { "type": "string" },
+                        "resposta": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { 
+            "description": "Campo inválido ou resposta obrigatória",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "401": { "description": "Token de acesso necessário" },
+          "403": { "description": "Token inválido" }
+        }
+      }
+    },
+    "/mvv/relatorio": {
+      "get": {
+        "tags": ["MVV"],
+        "summary": "Gerar relatório MVV",
+        "description": "Gera um relatório estruturado das respostas da MVV para processamento pelo GPT",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Relatório gerado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/MvvRelatorio" }
+              }
+            }
+          },
+          "401": { "description": "Token de acesso necessário" },
+          "403": { "description": "Token inválido" },
+          "404": { 
+            "description": "Nenhuma resposta encontrada",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/thread": {
+      "post": {
+        "tags": ["Chat"],
+        "summary": "Criar thread de chat",
+        "description": "Cria uma nova thread de chat para o usuário e etapa específica",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "etapa": { 
+                    "type": "string", 
+                    "example": "missao",
+                    "description": "Etapa do workshop (missao, swot, okr, etc.)"
+                  },
+                  "titulo": { 
+                    "type": "string", 
+                    "example": "Thread Missão - 15/01/2024",
+                    "description": "Título da thread (opcional)"
+                  }
+                },
+                "required": ["etapa"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Thread criada com sucesso",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ChatThread" }
+              }
+            }
+          },
+          "401": { "description": "Token de acesso necessário" },
+          "500": { "description": "Erro interno do servidor" }
+        }
+      }
+    },
+    "/chat/threads": {
+      "get": {
+        "tags": ["Chat"],
+        "summary": "Buscar threads do usuário",
+        "description": "Lista todas as threads de chat do usuário autenticado",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "etapa",
+            "in": "query",
+            "description": "Filtrar por etapa específica",
+            "required": false,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Threads encontradas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/ChatThread" }
+                }
+              }
+            }
+          },
+          "401": { "description": "Token de acesso necessário" },
+          "500": { "description": "Erro interno do servidor" }
+        }
+      }
+    },
+    "/chat/thread/{threadId}": {
+      "get": {
+        "tags": ["Chat"],
+        "summary": "Buscar thread específica",
+        "description": "Busca dados de uma thread específica",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "threadId",
+            "in": "path",
+            "description": "ID da thread",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Thread encontrada",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ChatThread" }
+              }
+            }
+          },
+          "404": { "description": "Thread não encontrada" },
+          "401": { "description": "Token de acesso necessário" },
+          "500": { "description": "Erro interno do servidor" }
+        }
+      }
+    },
+    "/chat/message": {
+      "post": {
+        "tags": ["Chat"],
+        "summary": "Salvar mensagem",
+        "description": "Salva uma mensagem na thread de chat",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "threadId": { 
+                    "type": "string", 
+                    "description": "ID da thread"
+                  },
+                  "role": { 
+                    "type": "string", 
+                    "enum": ["user", "assistant", "system"],
+                    "description": "Papel da mensagem"
+                  },
+                  "content": { 
+                    "type": "string", 
+                    "description": "Conteúdo da mensagem"
+                  },
+                  "metadata": { 
+                    "type": "object", 
+                    "description": "Metadados adicionais (opcional)"
+                  }
+                },
+                "required": ["threadId", "role", "content"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Mensagem salva com sucesso",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ChatMessage" }
+              }
+            }
+          },
+          "401": { "description": "Token de acesso necessário" },
+          "500": { "description": "Erro interno do servidor" }
+        }
+      }
+    },
+    "/chat/messages/{threadId}": {
+      "get": {
+        "tags": ["Chat"],
+        "summary": "Buscar mensagens da thread",
+        "description": "Lista todas as mensagens de uma thread específica",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "threadId",
+            "in": "path",
+            "description": "ID da thread",
+            "required": true,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Mensagens encontradas",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": { "$ref": "#/components/schemas/ChatMessage" }
+                }
+              }
+            }
+          },
+          "401": { "description": "Token de acesso necessário" },
+          "500": { "description": "Erro interno do servidor" }
+        }
+      }
+    },
+    "/chat/relatorio": {
+      "post": {
+        "tags": ["Chat"],
+        "summary": "Salvar relatório",
+        "description": "Salva um relatório gerado pelo GPT",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "threadId": { 
+                    "type": "string", 
+                    "description": "ID da thread"
+                  },
+                  "tipoRelatorio": { 
+                    "type": "string", 
+                    "example": "mvv",
+                    "description": "Tipo do relatório"
+                  },
+                  "titulo": { 
+                    "type": "string", 
+                    "description": "Título do relatório"
+                  },
+                  "conteudo": { 
+                    "type": "string", 
+                    "description": "Conteúdo do relatório"
+                  },
+                  "insights": { 
+                    "type": "object", 
+                    "description": "Insights estruturados (opcional)"
+                  },
+                  "recomendacoes": { 
+                    "type": "object", 
+                    "description": "Recomendações (opcional)"
+                  }
+                },
+                "required": ["threadId", "tipoRelatorio", "titulo", "conteudo"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Relatório salvo com sucesso",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ChatRelatorio" }
+              }
+            }
+          },
+          "401": { "description": "Token de acesso necessário" },
+          "500": { "description": "Erro interno do servidor" }
+        }
+      }
+    },
+    "/chat/relatorio/{threadId}": {
+      "get": {
+        "tags": ["Chat"],
+        "summary": "Buscar relatório da thread",
+        "description": "Busca o relatório de uma thread específica",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          {
+            "name": "threadId",
+            "in": "path",
+            "description": "ID da thread",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "tipoRelatorio",
+            "in": "query",
+            "description": "Filtrar por tipo de relatório",
+            "required": false,
+            "schema": { "type": "string" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Relatório encontrado",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ChatRelatorio" }
+              }
+            }
+          },
+          "404": { "description": "Relatório não encontrado" },
+          "401": { "description": "Token de acesso necessário" },
+          "500": { "description": "Erro interno do servidor" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": { 
+            "type": "string", 
+            "example": "550e8400-e29b-41d4-a716-446655440000",
+            "description": "ID único do usuário"
+          },
+          "nome_completo": { 
+            "type": "string", 
+            "example": "João da Silva",
+            "description": "Nome completo do advogado"
+          },
+          "email": { 
+            "type": "string", 
+            "example": "joao@email.com",
+            "description": "Email profissional"
+          },
+          "oab": { 
+            "type": "string", 
+            "example": "123456",
+            "description": "Número da OAB"
+          },
+          "uf_oab": { 
+            "type": "string", 
+            "example": "PR",
+            "description": "UF da OAB"
+          },
+          "criado_em": { 
+            "type": "string", 
+            "format": "date-time",
+            "example": "2024-01-15T10:30:00Z",
+            "description": "Data de criação da conta"
+          }
+        }
+      },
+      "UserUpdate": {
+        "type": "object",
+        "properties": {
+          "nome_completo": { 
+            "type": "string", 
+            "example": "João da Silva Santos",
+            "description": "Nome completo do advogado"
+          },
+          "email": { 
+            "type": "string", 
+            "example": "joao.santos@email.com",
+            "description": "Email profissional"
+          }
+        }
+      },
+      "MvvRespostas": {
+        "type": "object",
+        "properties": {
+          "atividades_motivadoras": { 
+            "type": "string", 
+            "example": "Advocacia em causas sociais",
+            "description": "Atividades que fazem se sentir útil e motivado"
+          },
+          "beneficiarios": { 
+            "type": "string", 
+            "example": "Clientes e sociedade",
+            "description": "Pessoas beneficiadas pelo trabalho"
+          },
+          "satisfacao_profissional": { 
+            "type": "string", 
+            "example": "Defender direitos fundamentais",
+            "description": "O que mais trouxe satisfação profissional"
+          },
+          "carreira_5_anos": { 
+            "type": "string", 
+            "example": "Especialista em direitos humanos",
+            "description": "Visão de carreira para os próximos 5 anos"
+          },
+          "reconhecimento_profissional": { 
+            "type": "string", 
+            "example": "Referência na área de direitos humanos",
+            "description": "Reconhecimento profissional desejado"
+          },
+          "impacto_legado": { 
+            "type": "string", 
+            "example": "Contribuir para justiça social",
+            "description": "Impacto e legado desejados"
+          },
+          "atitudes_admiraveis": { 
+            "type": "string", 
+            "example": "Integridade e empatia",
+            "description": "Atitudes que admira nas outras pessoas"
+          },
+          "comportamentos_inaceitaveis": { 
+            "type": "string", 
+            "example": "Desonestidade e corrupção",
+            "description": "Comportamentos inaceitáveis"
+          },
+          "valores_decisoes": { 
+            "type": "string", 
+            "example": "Justiça e ética",
+            "description": "Valores que guiam decisões difíceis"
+          }
+        }
+      },
+      "MvvRelatorio": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "missao": {
+                "type": "object",
+                "properties": {
+                  "atividades_motivadoras": { "type": "string" },
+                  "beneficiarios": { "type": "string" },
+                  "satisfacao_profissional": { "type": "string" }
+                }
+              },
+              "visao": {
+                "type": "object",
+                "properties": {
+                  "carreira_5_anos": { "type": "string" },
+                  "reconhecimento_profissional": { "type": "string" },
+                  "impacto_legado": { "type": "string" }
+                }
+              },
+              "valores": {
+                "type": "object",
+                "properties": {
+                  "atitudes_admiraveis": { "type": "string" },
+                  "comportamentos_inaceitaveis": { "type": "string" },
+                  "valores_decisoes": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": { 
+            "type": "string", 
+            "example": "Mensagem de erro",
+            "description": "Descrição do erro"
+          }
+        }
+      },
+      "ChatThread": {
+        "type": "object",
+        "properties": {
+          "id": { 
+            "type": "string", 
+            "description": "ID único da thread"
+          },
+          "usuario_id": { 
+            "type": "string", 
+            "description": "ID do usuário"
+          },
+          "etapa": { 
+            "type": "string", 
+            "example": "missao",
+            "description": "Etapa do workshop"
+          },
+          "thread_id": { 
+            "type": "string", 
+            "description": "ID único da thread"
+          },
+          "titulo": { 
+            "type": "string", 
+            "description": "Título da thread"
+          },
+          "status": { 
+            "type": "string", 
+            "example": "ativo",
+            "description": "Status da thread"
+          },
+          "criado_em": { 
+            "type": "string", 
+            "format": "date-time",
+            "description": "Data de criação"
+          },
+          "atualizado_em": { 
+            "type": "string", 
+            "format": "date-time",
+            "description": "Data de atualização"
+          }
+        }
+      },
+      "ChatMessage": {
+        "type": "object",
+        "properties": {
+          "id": { 
+            "type": "string", 
+            "description": "ID único da mensagem"
+          },
+          "thread_id": { 
+            "type": "string", 
+            "description": "ID da thread"
+          },
+          "role": { 
+            "type": "string", 
+            "enum": ["user", "assistant", "system"],
+            "description": "Papel da mensagem"
+          },
+          "content": { 
+            "type": "string", 
+            "description": "Conteúdo da mensagem"
+          },
+          "metadata": { 
+            "type": "object", 
+            "description": "Metadados adicionais"
+          },
+          "criado_em": { 
+            "type": "string", 
+            "format": "date-time",
+            "description": "Data de criação"
+          }
+        }
+      },
+      "ChatRelatorio": {
+        "type": "object",
+        "properties": {
+          "id": { 
+            "type": "string", 
+            "description": "ID único do relatório"
+          },
+          "thread_id": { 
+            "type": "string", 
+            "description": "ID da thread"
+          },
+          "tipo_relatorio": { 
+            "type": "string", 
+            "example": "mvv",
+            "description": "Tipo do relatório"
+          },
+          "titulo": { 
+            "type": "string", 
+            "description": "Título do relatório"
+          },
+          "conteudo": { 
+            "type": "string", 
+            "description": "Conteúdo do relatório"
+          },
+          "insights": { 
+            "type": "object", 
+            "description": "Insights estruturados"
+          },
+          "recomendacoes": { 
+            "type": "object", 
+            "description": "Recomendações"
+          },
+          "status": { 
+            "type": "string", 
+            "example": "gerado",
+            "description": "Status do relatório"
+          },
+          "criado_em": { 
+            "type": "string", 
+            "format": "date-time",
+            "description": "Data de criação"
+          },
+          "atualizado_em": { 
+            "type": "string", 
+            "format": "date-time",
+            "description": "Data de atualização"
+          }
+        }
+      }
+    }
+  }
+} 

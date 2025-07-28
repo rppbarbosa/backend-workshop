@@ -1,0 +1,26 @@
+# Configurações do Supabase
+SUPABASE_URL=https://your-project-ref.supabase.co
+SUPABASE_ANON_KEY=your-anon-key-here
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key-here
+
+# Configurações do JWT
+JWT_SECRET=your-jwt-secret-here
+
+# Configurações do Servidor
+PORT=3000
+
+# Configurações do Banco (opcional - para compatibilidade)
+DATABASE_URL=postgresql://username:password@host:port/database
+
+# Configurações da OpenAI
+OPENAI_API_KEY=your-openai-api-key-here
+
+# Assistentes OpenAI para cada etapa do workshop
+OPENAI_ASSISTANT_MISSAO=asst_missao_id_here
+OPENAI_ASSISTANT_SWOT=asst_swot_id_here
+OPENAI_ASSISTANT_OKR=asst_okr_id_here
+OPENAI_ASSISTANT_PLANO_ACAO=asst_plano_acao_id_here
+OPENAI_ASSISTANT_METRICAS=asst_metricas_id_here
+
+# Assistente padrão (fallback)
+OPENAI_ASSISTANT_DEFAULT=asst_default_id_here 
