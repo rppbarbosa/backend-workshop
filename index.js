@@ -18,7 +18,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'future-law-planner-secret-key-2024
 // Middleware
 app.use(cors({
   origin: '*', // Permite todas as origens
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'ngrok-skip-browser-warning']
 }));
 app.use(express.json());
