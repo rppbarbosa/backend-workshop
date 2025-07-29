@@ -224,7 +224,7 @@ class ChatAPI {
     return result;
   }
 
-  // Atualizar relatório (conteúdo e status) - VERSÃO SIMPLIFICADA E ROBUSTA
+  // Atualizar relatório (conteúdo e status) - VERSÃO MELHORADA COM CRIAÇÃO AUTOMÁTICA
   async atualizarRelatorio(threadId, tipoRelatorio, novoConteudo = null, novoStatus = null) {
     console.log(`🔍 atualizarRelatorio chamado com threadId: ${threadId}, tipoRelatorio: ${tipoRelatorio}`);
     console.log(`📝 Novo conteúdo: ${novoConteudo ? 'Sim (' + novoConteudo.length + ' chars)' : 'Não'}, Novo status: ${novoStatus || 'Não especificado'}`);
@@ -235,21 +235,11 @@ class ChatAPI {
       console.log('📋 Relatório existente encontrado:', existingReport);
       
       if (existingReport) {
-        console.log(`📝 Atualizando relatório ID: ${existingReport.id}`);
-        
-        // PRIMEIRO: Fazer um teste simples para verificar se conseguimos atualizar
-        console.log('🧪 Fazendo teste de atualização simples...');
-        const testResult = await this.testUpdateRelatorio(threadId, tipoRelatorio);
-        if (!testResult) {
-          console.error('❌ TESTE FALHOU: Não conseguimos fazer uma atualização simples');
-          throw new Error('Falha no teste de atualização - verificar permissões do Supabase');
-        }
-        console.log('✅ TESTE PASSOU: Podemos fazer atualizações');
+        // RELATÓRIO EXISTE - ATUALIZAR
+        console.log(`📝 Atualizando relatório existente ID: ${existingReport.id}`);
         
         // Preparar dados para atualização
-        const updateData = {
-          atualizado_em: new Date().toISOString()
-        };
+        const updateData = {};
         
         if (novoConteudo !== null) {
           updateData.conteudo = novoConteudo;
@@ -259,21 +249,25 @@ class ChatAPI {
           updateData.status = novoStatus;
         }
         
+        // Sempre atualizar o timestamp
+        updateData.atualizado_em = new Date().toISOString();
+        
         console.log('📤 Dados para atualização:', updateData);
         console.log('🌐 URL da requisição:', `${this.supabaseUrl}/rest/v1/chat_relatorios?id=eq.${existingReport.id}`);
         
-        // ABORDAGEM SIMPLIFICADA: PATCH direto
+        // PATCH para atualizar
         const response = await fetch(`${this.supabaseUrl}/rest/v1/chat_relatorios?id=eq.${existingReport.id}`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${this.supabaseKey}`,
-            'apikey': this.supabaseKey
+            'apikey': this.supabaseKey,
+            'Prefer': 'return=representation'
           },
           body: JSON.stringify(updateData)
         });
         
-        console.log('📡 Resposta do Supabase:', response.status, response.statusText);
+        console.log('📡 Resposta do Supabase (PATCH):', response.status, response.statusText);
         
         if (!response.ok) {
           const errorText = await response.text();
@@ -283,45 +277,83 @@ class ChatAPI {
         
         // Verificar se a atualização realmente aconteceu
         console.log('🔍 Verificando se a atualização foi persistida...');
-        await new Promise(resolve => setTimeout(resolve, 500)); // Aguardar meio segundo
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
         const updatedReport = await this.getRelatorio(threadId, tipoRelatorio);
         console.log('📋 Relatório após atualização:', updatedReport);
         
-        // Verificar se os campos foram atualizados
-        let updateConfirmed = true;
-        let errorMessages = [];
+        console.log('✅ Relatório atualizado com sucesso');
+        return { success: true, message: 'Relatório atualizado com sucesso', data: updatedReport, action: 'updated' };
         
-        if (novoStatus !== null && updatedReport.status !== novoStatus) {
-          const errorMsg = `Status não foi atualizado. Esperado: ${novoStatus}, Atual: ${updatedReport.status}`;
-          console.error(`❌ ${errorMsg}`);
-          errorMessages.push(errorMsg);
-          updateConfirmed = false;
-        }
-        
-        if (novoConteudo !== null && updatedReport.conteudo !== novoConteudo) {
-          const errorMsg = 'Conteúdo não foi atualizado';
-          console.error(`❌ ${errorMsg}`);
-          errorMessages.push(errorMsg);
-          updateConfirmed = false;
-        }
-        
-        if (updateConfirmed) {
-          console.log('✅ Confirmação: relatório foi atualizado no banco de dados');
-          console.log(`📊 Status atual: ${updatedReport.status}`);
-          console.log(`📄 Tamanho do conteúdo: ${updatedReport.conteudo ? updatedReport.conteudo.length : 0} caracteres`);
-          return { success: true, message: 'Relatório atualizado com sucesso', data: updatedReport };
-        } else {
-          const errorMsg = 'Falha na persistência: ' + errorMessages.join(', ');
-          console.error(`❌ ${errorMsg}`);
-          throw new Error(errorMsg);
-        }
       } else {
-        console.log('⚠️ Nenhum relatório encontrado para atualizar');
-        throw new Error('Relatório não encontrado para atualizar');
+        // RELATÓRIO NÃO EXISTE - CRIAR NOVO
+        console.log('🆕 Relatório não encontrado - criando novo relatório...');
+        
+        // Buscar informações da thread para criar o relatório
+        const threadInfo = await this.getChatThread(threadId);
+        if (!threadInfo) {
+          throw new Error('Thread não encontrada para criar relatório');
+        }
+        
+        // Preparar dados para criação
+        const newReportData = {
+          thread_id: threadId,
+          tipo_relatorio: tipoRelatorio,
+          titulo: `Relatório ${tipoRelatorio} - ${threadInfo.titulo || 'Sem título'}`,
+          conteudo: novoConteudo || 'Relatório gerado automaticamente',
+          status: novoStatus || 'finalizado',
+          insights: null,
+          recomendacoes: null
+        };
+        
+        console.log('📤 Dados para criação:', newReportData);
+        console.log('🌐 URL da requisição:', `${this.supabaseUrl}/rest/v1/chat_relatorios`);
+        
+        // POST para criar novo relatório
+        const response = await fetch(`${this.supabaseUrl}/rest/v1/chat_relatorios`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${this.supabaseKey}`,
+            'apikey': this.supabaseKey,
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify(newReportData)
+        });
+        
+        console.log('📡 Resposta do Supabase (POST):', response.status, response.statusText);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('❌ Erro na resposta do Supabase:', errorText);
+          throw new Error(`Erro ao criar relatório: ${response.status} - ${errorText}`);
+        }
+        
+        // Tentar obter dados da resposta
+        let responseData = null;
+        try {
+          responseData = await response.json();
+          console.log('📋 Dados da resposta do POST:', responseData);
+        } catch (parseError) {
+          console.log('⚠️ Não foi possível fazer parse da resposta JSON');
+        }
+        
+        // Verificar se a criação realmente aconteceu
+        console.log('🔍 Verificando se a criação foi persistida...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        const createdReport = await this.getRelatorio(threadId, tipoRelatorio);
+        console.log('📋 Relatório após criação:', createdReport);
+        
+        if (createdReport) {
+          console.log('✅ Relatório criado com sucesso');
+          return { success: true, message: 'Relatório criado com sucesso', data: createdReport, action: 'created' };
+        } else {
+          throw new Error('Relatório foi criado mas não foi possível recuperá-lo');
+        }
       }
     } catch (error) {
-      console.error('❌ Erro ao atualizar relatório:', error);
+      console.error('❌ Erro ao atualizar/criar relatório:', error);
       throw error;
     }
   }
