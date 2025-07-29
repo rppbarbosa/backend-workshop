@@ -1586,6 +1586,7 @@ app.post('/relatorio/consolidado', authenticateToken, async (req, res) => {
     console.log('Gerando relatório consolidado para usuário:', userId);
 
     // 1. Buscar dados de todas as etapas
+    console.log('Buscando dados das etapas...');
     const discData = await supabaseAPI.getDiscRespostas(userId);
     const temperamentosData = await supabaseAPI.getTemperamentosRespostas(userId);
     const mvvData = await supabaseAPI.getMvvRespostas(userId);
@@ -1593,20 +1594,40 @@ app.post('/relatorio/consolidado', authenticateToken, async (req, res) => {
     const okrData = await supabaseAPI.getOkrRespostas(userId);
     const rodaVidaData = await supabaseAPI.getRodaVidaRespostas(userId);
 
+    console.log('Dados das etapas carregados:', {
+      disc: !!discData,
+      temperamentos: !!temperamentosData,
+      mvv: !!mvvData,
+      swot: !!swotData,
+      okr: !!okrData,
+      rodaVida: !!rodaVidaData
+    });
+
     // 2. Verificar se todas as etapas foram completadas
     if (!discData || !temperamentosData || !mvvData || !swotData || !okrData || !rodaVidaData) {
       return res.status(400).json({ 
-        error: 'Todas as etapas devem ser completadas antes de gerar o relatório consolidado' 
+        error: 'Todas as etapas devem ser completadas antes de gerar o relatório consolidado',
+        missing: {
+          disc: !discData,
+          temperamentos: !temperamentosData,
+          mvv: !mvvData,
+          swot: !swotData,
+          okr: !okrData,
+          rodaVida: !rodaVidaData
+        }
       });
     }
 
     // 3. Criar thread OpenAI para o relatório consolidado
+    console.log('Criando thread OpenAI...');
     let thread = null;
     const userThreads = await chatAPI.getUserThreads(userId, 'relatorio-consolidado');
     if (userThreads && userThreads.length > 0) {
       thread = userThreads[0];
+      console.log('Thread existente encontrada:', thread.thread_id);
     } else {
       thread = await chatAPI.createOpenAIThread(userId, 'relatorio-consolidado', 'Relatório Consolidado');
+      console.log('Nova thread criada:', thread.thread_id);
     }
     const threadId = thread.thread_id;
 
@@ -1622,6 +1643,7 @@ app.post('/relatorio/consolidado', authenticateToken, async (req, res) => {
     };
 
     // 5. Adicionar mensagem do usuário na thread OpenAI
+    console.log('Adicionando mensagem na thread...');
     const userMessageContent = `Dados consolidados do workshop para ${userName}:\n${JSON.stringify(dadosConsolidados, null, 2)}`;
     await chatAPI.addMessageToThread(threadId, 'user', userMessageContent, { 
       etapa: 'relatorio-consolidado', 
@@ -1629,6 +1651,7 @@ app.post('/relatorio/consolidado', authenticateToken, async (req, res) => {
     });
 
     // 6. Obter configuração do assistente para relatório consolidado
+    console.log('Obtendo configuração do assistente...');
     const assistantConfig = assistantManager.getAssistantConfig('relatorio-consolidado');
     
     if (!assistantConfig.assistantId) {
@@ -1636,6 +1659,7 @@ app.post('/relatorio/consolidado', authenticateToken, async (req, res) => {
     }
 
     // 7. Chamar GPT usando a thread OpenAI
+    console.log('Iniciando processamento com OpenAI...');
     const OpenAI = require('openai');
     const openaiApiKey = process.env.OPENAI_API_KEY;
     if (!openaiApiKey) {
@@ -1649,34 +1673,49 @@ app.post('/relatorio/consolidado', authenticateToken, async (req, res) => {
       instructions: assistantConfig.instructions
     });
 
-    // Aguardar conclusão do run
+    console.log('Run criado:', run.id, 'Status:', run.status);
+
+    // Aguardar conclusão do run com timeout
     let runStatus = run.status;
-    while (runStatus === 'queued' || runStatus === 'in_progress') {
+    let attempts = 0;
+    const maxAttempts = 30; // 30 segundos máximo
+    
+    while ((runStatus === 'queued' || runStatus === 'in_progress') && attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 1000));
       const runCheck = await openaiClient.beta.threads.runs.retrieve(threadId, run.id);
       runStatus = runCheck.status;
+      attempts++;
+      console.log(`Tentativa ${attempts}/${maxAttempts}: Status do run: ${runStatus}`);
     }
 
     if (runStatus === 'completed') {
+      console.log('Run completado com sucesso!');
+      
       // 8. Buscar mensagens da thread OpenAI
       const messages = await openaiClient.beta.threads.messages.list(threadId);
       const assistantMessage = messages.data.find(msg => msg.role === 'assistant');
       
       if (assistantMessage) {
         const gptContent = assistantMessage.content[0].text.value;
+        console.log('Resposta do assistente obtida, tamanho:', gptContent.length);
         
         // 9. Salvar resposta do assistente no banco
+        console.log('Salvando mensagem no banco...');
         await chatAPI.saveChatMessage(threadId, 'assistant', gptContent, { 
           etapa: 'relatorio-consolidado', 
           tipo: 'relatorio_consolidado' 
         });
 
         // 10. Salvar relatório consolidado
+        console.log('Salvando relatório consolidado...');
         await chatAPI.saveRelatorio(threadId, 'relatorio-consolidado', 'Relatório Consolidado', gptContent);
 
         // 11. Buscar histórico e relatório do banco
+        console.log('Buscando dados finais...');
         const historico = await chatAPI.getChatMessages(threadId);
         const relatorio = await chatAPI.getRelatorio(threadId, 'relatorio-consolidado');
+
+        console.log('Relatório consolidado gerado com sucesso!');
 
         // 12. Retornar tudo para o frontend
         res.status(201).json({
@@ -1690,12 +1729,22 @@ app.post('/relatorio/consolidado', authenticateToken, async (req, res) => {
       } else {
         throw new Error('Nenhuma resposta do assistente encontrada');
       }
-    } else {
+    } else if (runStatus === 'failed') {
+      console.error('Run falhou:', runStatus);
       throw new Error(`Run falhou com status: ${runStatus}`);
+    } else if (attempts >= maxAttempts) {
+      console.error('Timeout: Run não completou em tempo hábil');
+      throw new Error('Timeout: Processamento demorou muito tempo');
+    } else {
+      console.error('Status inesperado do run:', runStatus);
+      throw new Error(`Status inesperado do run: ${runStatus}`);
     }
   } catch (error) {
     console.error('Erro ao gerar relatório consolidado:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 });
 
@@ -1748,3 +1797,174 @@ app.listen(PORT, () => {
   console.log(`📊 Swagger UI disponível em: http://localhost:${PORT}/api-docs`);
   console.log(`🌍 Ambiente: ${process.env.NODE_ENV || 'development'}`);
 }); 
+
+// ===== ROTA ALTERNATIVA PARA GERAR RELATÓRIO CONSOLIDADO (ASSÍNCRONO) =====
+app.post('/relatorio/consolidado-async', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const userName = req.user.nome_completo || 'Usuário';
+
+    console.log('Iniciando geração assíncrona de relatório consolidado para usuário:', userId);
+
+    // 1. Buscar dados de todas as etapas
+    const discData = await supabaseAPI.getDiscRespostas(userId);
+    const temperamentosData = await supabaseAPI.getTemperamentosRespostas(userId);
+    const mvvData = await supabaseAPI.getMvvRespostas(userId);
+    const swotData = await supabaseAPI.getSwotRespostas(userId);
+    const okrData = await supabaseAPI.getOkrRespostas(userId);
+    const rodaVidaData = await supabaseAPI.getRodaVidaRespostas(userId);
+
+    // 2. Verificar se todas as etapas foram completadas
+    if (!discData || !temperamentosData || !mvvData || !swotData || !okrData || !rodaVidaData) {
+      return res.status(400).json({ 
+        error: 'Todas as etapas devem ser completadas antes de gerar o relatório consolidado',
+        missing: {
+          disc: !discData,
+          temperamentos: !temperamentosData,
+          mvv: !mvvData,
+          swot: !swotData,
+          okr: !okrData,
+          rodaVida: !rodaVidaData
+        }
+      });
+    }
+
+    // 3. Criar thread OpenAI
+    let thread = null;
+    const userThreads = await chatAPI.getUserThreads(userId, 'relatorio-consolidado');
+    if (userThreads && userThreads.length > 0) {
+      thread = userThreads[0];
+    } else {
+      thread = await chatAPI.createOpenAIThread(userId, 'relatorio-consolidado', 'Relatório Consolidado');
+    }
+    const threadId = thread.thread_id;
+
+    // 4. Preparar dados consolidados
+    const dadosConsolidados = {
+      usuario: userName,
+      disc: discData,
+      temperamentos: temperamentosData,
+      mvv: mvvData,
+      swot: swotData,
+      okr: okrData,
+      rodaVida: rodaVidaData
+    };
+
+    // 5. Adicionar mensagem do usuário na thread OpenAI
+    const userMessageContent = `Dados consolidados do workshop para ${userName}:\n${JSON.stringify(dadosConsolidados, null, 2)}`;
+    await chatAPI.addMessageToThread(threadId, 'user', userMessageContent, { 
+      etapa: 'relatorio-consolidado', 
+      tipo: 'dados_consolidados' 
+    });
+
+    // 6. Obter configuração do assistente
+    const assistantConfig = assistantManager.getAssistantConfig('relatorio-consolidado');
+    
+    if (!assistantConfig.assistantId) {
+      return res.status(500).json({ error: 'Assistente não configurado para relatório consolidado' });
+    }
+
+    // 7. Iniciar processamento assíncrono
+    const OpenAI = require('openai');
+    const openaiApiKey = process.env.OPENAI_API_KEY;
+    if (!openaiApiKey) {
+      return res.status(500).json({ error: 'OPENAI_API_KEY não configurada no backend.' });
+    }
+    const openaiClient = new OpenAI({ apiKey: openaiApiKey });
+
+    // Criar run para processar a thread
+    const run = await openaiClient.beta.threads.runs.create(threadId, {
+      assistant_id: assistantConfig.assistantId,
+      instructions: assistantConfig.instructions
+    });
+
+    // Retornar imediatamente com o ID do run para acompanhamento
+    res.status(202).json({
+      message: 'Processamento iniciado',
+      thread_id: threadId,
+      run_id: run.id,
+      status: 'processing',
+      etapa: 'relatorio-consolidado'
+    });
+
+    // Continuar processamento em background (não bloqueia a resposta)
+    setTimeout(async () => {
+      try {
+        // Aguardar conclusão do run
+        let runStatus = run.status;
+        let attempts = 0;
+        const maxAttempts = 60; // 60 segundos máximo
+        
+        while ((runStatus === 'queued' || runStatus === 'in_progress') && attempts < maxAttempts) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          const runCheck = await openaiClient.beta.threads.runs.retrieve(threadId, run.id);
+          runStatus = runCheck.status;
+          attempts++;
+        }
+
+        if (runStatus === 'completed') {
+          // Buscar mensagens da thread OpenAI
+          const messages = await openaiClient.beta.threads.messages.list(threadId);
+          const assistantMessage = messages.data.find(msg => msg.role === 'assistant');
+          
+          if (assistantMessage) {
+            const gptContent = assistantMessage.content[0].text.value;
+            
+            // Salvar resposta do assistente no banco
+            await chatAPI.saveChatMessage(threadId, 'assistant', gptContent, { 
+              etapa: 'relatorio-consolidado', 
+              tipo: 'relatorio_consolidado' 
+            });
+
+            // Salvar relatório consolidado
+            await chatAPI.saveRelatorio(threadId, 'relatorio-consolidado', 'Relatório Consolidado', gptContent);
+            
+            console.log('Relatório consolidado processado com sucesso em background');
+          }
+        } else {
+          console.error('Run falhou em background:', runStatus);
+        }
+      } catch (error) {
+        console.error('Erro no processamento em background:', error);
+      }
+    }, 100);
+
+  } catch (error) {
+    console.error('Erro ao iniciar geração de relatório consolidado:', error);
+    res.status(500).json({ 
+      error: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// ===== ROTA PARA VERIFICAR STATUS DO RELATÓRIO CONSOLIDADO =====
+app.get('/relatorio/consolidado/status/:threadId', authenticateToken, async (req, res) => {
+  try {
+    const { threadId } = req.params;
+    const userId = req.user.id;
+
+    // Buscar relatório no banco
+    const relatorio = await chatAPI.getRelatorio(threadId, 'relatorio-consolidado');
+    const historico = await chatAPI.getChatMessages(threadId);
+
+    if (relatorio) {
+      res.json({
+        status: 'completed',
+        thread_id: threadId,
+        historico,
+        relatorio,
+        etapa: 'relatorio-consolidado'
+      });
+    } else {
+      res.json({
+        status: 'processing',
+        thread_id: threadId,
+        message: 'Relatório ainda sendo processado'
+      });
+    }
+  } catch (error) {
+    console.error('Erro ao verificar status do relatório:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
